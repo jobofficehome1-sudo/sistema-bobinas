@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Mestre - Gestão e Rastreio de Bobinas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #ffffff !important; padding: 0 !important; color: #000 !important; }
+            .print-area { border: none !important; box-shadow: none !important; width: 100% !important; max-width: 100% !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 min-h-screen text-slate-100 antialiased p-3 sm:p-6">
+    <div class="max-w-6xl mx-auto space-y-6">
+        <header class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-xl sm:text-2xl font-black text-white tracking-tight">Rastreio &amp; Controle de Bobinas</h1>
+                    <span class="bg-blue-500/20 text-blue-400 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full border border-blue-500/30">v1.0 Oficial</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">Gestão de estoque, leitura por câmera/foto e baixa de consumo.</p>
+            </div>
+            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 gap-1 w-full md:w-auto">
+                <button id="btnAbaBaixa" onclick="alternarAba('baixa')" class="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition bg-emerald-600 text-white">📷 Dar Baixa (Consumo)</button>
+                <button id="btnAbaCadastro" onclick="alternarAba('cadastro')" class="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white">➕ Entrada de Estoque</button>
+                <button id="btnAbaEstoque" onclick="alternarAba('estoque')" class="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white">📦 Relatório / Estoque</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Bobinas em Estoque</span><strong id="cardEmEstoque" class="text-2xl font-black text-emerald-400">0</strong></div>
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Bobinas Consumidas</span><strong id="cardConsumidas" class="text-2xl font-black text-amber-400">0</strong></div>
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Tecido Dispo. (MT)</span><strong id="cardMetrosEmEstoque" class="text-xl font-black text-blue-400">0 MT</strong></div>
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Peso Dispo. (KG)</span><strong id="cardPesoEmEstoque" class="text-xl font-black text-purple-400">0 KG</strong></div>
+        </div>
+
+        <section id="abaBaixa" class="space-y-6">
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
+                <h2 class="text-base font-bold text-white mb-1 uppercase tracking-wider flex items-center gap-2"><span class="w-2.5 h-2.5 bg-emerald-500 rounded-full inline-block"></span> Baixa por Câmera do Celular ou Leitor</h2>
+                <p class="text-xs text-slate-400 mb-5">Escaneie a etiqueta física trazida da produção para remover a bobina do estoque ativo.</p>
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                    <div class="md:col-span-6 bg-slate-950 p-4 rounded-xl border border-slate-800 text-center">
+                        <button id="btnCameraBaixa" onclick="iniciarCameraBaixa()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition">📷 Ligar Câmera do Celular</button>
+                        <div id="qrReaderBaixa" class="w-full overflow-hidden rounded-lg mt-3"></div>
+                        <p id="cameraStatusBaixa" class="text-xs text-slate-400 mt-2">Toque no botão para ativar a câmera.</p>
+                    </div>
+                    <div class="md:col-span-6 bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
+                        <div><label class="block text-xs font-bold text-slate-300 uppercase mb-2">Código do Barcode / Lote</label><div class="flex gap-2"><input type="text" id="inputCodigoBipado" placeholder="Ex: 655870S2 ou 655870" class="w-full bg-slate-900 border-2 border-slate-700 rounded-xl p-3 text-sm font-mono text-white focus:border-emerald-500 focus:outline-none"><button onclick="processarBaixaBobina(document.getElementById('inputCodigoBipado').value)" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 rounded-xl text-xs transition">Baixar</button></div></div>
+                        <div id="statusBaixaBobina" class="p-3 rounded-xl bg-slate-900 border border-slate-800 hidden text-xs font-bold"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="abaCadastro" class="hidden space-y-6">
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
+                <h2 class="text-base font-bold text-white mb-1 uppercase tracking-wider flex items-center gap-2"><span class="w-2.5 h-2.5 bg-blue-500 rounded-full inline-block"></span> Cadastrar Nova Bobina no Estoque</h2>
+                <p class="text-xs text-slate-400 mb-5">Leia a etiqueta com a câmera para preencher o código automaticamente. Confira os dados antes de cadastrar.</p>
+                <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 mb-5 text-center">
+                    <button type="button" id="btnCameraCadastro" onclick="iniciarCameraCadastro()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider">📷 Ler etiqueta para cadastrar</button>
+                    <div id="qrReaderCadastro" class="w-full overflow-hidden rounded-lg mt-3"></div>
+                    <p id="cameraStatusCadastro" class="text-xs text-slate-400 mt-2">Aponte para o código de barras ou QR code.</p>
+                </div>
+                <form id="formCadastroBobina" onsubmit="salvarNovaBobina(event)" class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Código Barra / Lote</label><input type="text" id="cadCodigo" required placeholder="Ex: 655870S2" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono"></div>
+                        <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Lote</label><input type="text" id="cadLote" required placeholder="Ex: 655870" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono"></div>
+                        <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Gramatura (g/m²)</label><input type="text" id="cadGramatura" value="229,26" required class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"></div>
+                    </div>
+                    <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Descrição do Tecido / Material</label><input type="text" id="cadDescricao" required value="TECIDO BRANCO CONVENCIONAL P/ BIG BAG SANFONADO 376 CM" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white uppercase"></div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Metragem (MT)</label><input type="number" step="0.01" id="cadMetragem" value="500" required class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-bold"></div>
+                        <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Peso Líquido (KG)</label><input type="number" step="0.01" id="cadPeso" value="431" required class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-bold"></div>
+                        <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Máquina Origem</label><input type="text" id="cadMaquina" value="4006" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"></div>
+                        <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Operador Origem</label><input type="text" id="cadOperador" value="4875" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"></div>
+                    </div>
+                    <div class="flex justify-end gap-3 pt-3"><button type="button" onclick="carregarExemploEtiqueta()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">Carregar Exemplo da Foto</button><button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider">Cadastrar no Estoque</button></div>
+                </form>
+            </div>
+        </section>
+
+        <section id="abaEstoque" class="hidden space-y-6">
+            <div class="bg-white text-slate-900 p-6 rounded-2xl shadow-2xl border border-slate-200">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4 mb-4"><div><h3 class="text-base font-black uppercase text-slate-900">Relatório Completo de Bobinas</h3><p class="text-xs font-bold text-slate-500">Histórico de consumo e rastreio por máquina e operador.</p></div><div class="flex gap-2"><button onclick="filtrarStatus('TODOS')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-200 text-slate-800">Todos</button><button onclick="filtrarStatus('EM ESTOQUE')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800">Em Estoque</button><button onclick="filtrarStatus('CONSUMIDO')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-800">Consumidas</button></div></div>
+                <div class="overflow-x-auto"><table class="w-full text-left text-xs border-collapse"><thead><tr class="bg-slate-900 text-white uppercase text-[10px] tracking-wider"><th class="p-3 border">Código/Lote</th><th class="p-3 border">Descrição do Tecido</th><th class="p-3 border text-center">Gram.</th><th class="p-3 border text-center">Metragem</th><th class="p-3 border text-center">Peso</th><th class="p-3 border text-center">Máq/Op. Origem</th><th class="p-3 border text-center">Status</th><th class="p-3 border text-center">Data Entrada</th><th class="p-3 border text-center">Data Baixa</th></tr></thead><tbody id="tabelaEstoqueBobinas" class="divide-y divide-slate-200"></tbody></table></div>
+            </div>
+        </section>
+    </div>
+<script>
+const STORAGE_KEY = "sistema_bobinas_mestre_v1";
+let listaBobinas = [];
+let filtroAtual = "TODOS";
+let cameraBaixa = null;
+let cameraCadastro = null;
+let ultimaLeitura = "";
+let ultimaLeituraEm = 0;
+const BOBINAS_INICIAIS = [{codigo:"655870S2",lote:"655870",descricao:"TECIDO BRANCO CONVENCIONAL P/ BIG BAG SANFONADO 376 CM",gramatura:"229,26",metragem:500,peso:431,maquina:"4006",operador:"4875",status:"EM ESTOQUE",dataEntrada:"30/07/2026, 14:39",dataBaixa:"--"}];
+
+function carregarDados(){
+    const salvos=localStorage.getItem(STORAGE_KEY);
+    if(salvos){try{listaBobinas=JSON.parse(salvos)}catch(e){listaBobinas=BOBINAS_INICIAIS}}
+    else{listaBobinas=BOBINAS_INICIAIS;localStorage.setItem(STORAGE_KEY,JSON.stringify(listaBobinas))}
+    atualizarTudo();
+}
+function salvarDados(){localStorage.setItem(STORAGE_KEY,JSON.stringify(listaBobinas));atualizarTudo()}
+function atualizarTudo(){renderizarCards();renderizarTabela()}
+function renderizarCards(){
+    const emEstoque=listaBobinas.filter(b=>b.status==="EM ESTOQUE"),consumidas=listaBobinas.filter(b=>b.status==="CONSUMIDO");
+    const totalMetros=emEstoque.reduce((acc,b)=>acc+Number(b.metragem),0),totalPeso=emEstoque.reduce((acc,b)=>acc+Number(b.peso),0);
+    document.getElementById("cardEmEstoque").innerText=emEstoque.length;
+    document.getElementById("cardConsumidas").innerText=consumidas.length;
+    document.getElementById("cardMetrosEmEstoque").innerText=`${totalMetros.toLocaleString('pt-BR')} MT`;
+    document.getElementById("cardPesoEmEstoque").innerText=`${totalPeso.toLocaleString('pt-BR')} KG`;
+}
+function alternarAba(aba){
+    ["abaBaixa","abaCadastro","abaEstoque"].forEach(id=>document.getElementById(id).classList.add("hidden"));
+    const botoes={baixa:"btnAbaBaixa",cadastro:"btnAbaCadastro",estoque:"btnAbaEstoque"};
+    Object.values(botoes).forEach(id=>document.getElementById(id).className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white");
+    document.getElementById("aba"+aba.charAt(0).toUpperCase()+aba.slice(1)).classList.remove("hidden");
+    document.getElementById(botoes[aba]).className="flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition "+({baixa:"bg-emerald-600 text-white",cadastro:"bg-blue-600 text-white",estoque:"bg-purple-600 text-white"}[aba]);
+}
+async function iniciarCameraBaixa(){ await iniciarLeitor("qrReaderBaixa", "baixa"); }
+async function iniciarCameraCadastro(){ await iniciarLeitor("qrReaderCadastro", "cadastro"); }
+async function iniciarLeitor(elementId, tipo) {
+    const status = document.getElementById(tipo === "baixa" ? "cameraStatusBaixa" : "cameraStatusCadastro");
+    const button = document.getElementById(tipo === "baixa" ? "btnCameraBaixa" : "btnCameraCadastro");
+    let leitor = tipo === "baixa" ? cameraBaixa : cameraCadastro;
+    if (!window.isSecureContext && location.hostname !== "localhost") {
+        status.textContent = "A câmera exige HTTPS. O navegador pode bloquear o acesso quando o HTML é aberto como arquivo baixado (content://). Publique/abra por um endereço HTTPS.";
+        status.className = "text-xs text-amber-300 mt-2"; return;
+    }
+    if (!window.Html5Qrcode) {
+        status.textContent = "O leitor não carregou. Verifique a internet e recarregue a página.";
+        status.className = "text-xs text-red-300 mt-2"; return;
+    }
+    try {
+        if (leitor && leitor.isScanning) {
+            await leitor.stop();
+            status.textContent = "Câmera pausada. Toque novamente para reiniciar.";
+            button.textContent = tipo === "baixa" ? "📷 Ligar Câmera do Celular" : "📷 Ler etiqueta para cadastrar";
+            return;
+        }
+        if (leitor) { try { await leitor.clear(); } catch (e) {} }
+        if (!leitor) {
+            leitor = new Html5Qrcode(elementId, { formatsToSupport: [
+                Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.ITF,
+                Html5QrcodeSupportedFormats.DATA_MATRIX
+            ], verbose: false });
+            if (tipo === "baixa") cameraBaixa = leitor; else cameraCadastro = leitor;
+        }
+        status.textContent = "Solicitando permissão da câmera...";
+        button.textContent = "⏳ Iniciando...";
+        const cameras = await Html5Qrcode.getCameras();
+        if (!cameras || !cameras.length) throw new Error("Nenhuma câmera encontrada.");
+        const camera = cameras.find(c => /back|rear|environment|traseira|principal/i.test(c.label)) || cameras[cameras.length - 1];
+        await leitor.start(camera.id, { fps: 12, qrbox: (w, h) => {
+            const side = Math.max(160, Math.min(280, Math.floor(Math.min(w, h) * 0.75)));
+            return { width: side, height: side };
+        }}, decodedText => {
+            const now = Date.now();
+            if (decodedText === ultimaLeitura && now - ultimaLeituraEm < 2500) return;
+            ultimaLeitura = decodedText; ultimaLeituraEm = now;
+            if (tipo === "baixa") {
+                processarBaixaBobina(decodedText);
+                status.textContent = "Etiqueta lida: " + decodedText;
+            } else {
+                preencherCadastroPelaEtiqueta(decodedText);
+                status.textContent = "Código lido: " + decodedText + ". Confira os dados e toque em Cadastrar no Estoque.";
+            }
+            status.className = "text-xs text-emerald-300 mt-2";
+            leitor.pause(true);
+            button.textContent = "✓ Lido — toque para ler outra etiqueta";
+        }, () => {});
+        status.textContent = "Câmera ativa. Aponte para o código de barras ou QR code.";
+        status.className = "text-xs text-emerald-300 mt-2";
+        button.textContent = "⏹ Pausar câmera";
+    } catch (err) {
+        status.textContent = "Não foi possível abrir a câmera: " + (err && err.message ? err.message : String(err)) + ". Permita o acesso à câmera nas configurações do navegador e tente novamente.";
+        status.className = "text-xs text-red-300 mt-2";
+        button.textContent = tipo === "baixa" ? "📷 Tentar ligar câmera novamente" : "📷 Tentar ler etiqueta novamente";
+    }
+}
+function preencherCadastroPelaEtiqueta(texto) {
+    const valor = String(texto || "").trim().toUpperCase();
+    if (!valor) return;
+    document.getElementById("cadCodigo").value = valor;
+    const numeros = valor.match(/\d{4,}/);
+    if (/^\d+$/.test(valor)) document.getElementById("cadLote").value = valor;
+    else if (numeros && !document.getElementById("cadLote").value.trim()) document.getElementById("cadLote").value = numeros[0];
+}
+function processarBaixaBobina(codigoText){
+    if(!codigoText||!codigoText.trim())return;
+    const cod=codigoText.trim().toUpperCase(),statusEl=document.getElementById("statusBaixaBobina");
+    statusEl.classList.remove("hidden");
+    const bobina=listaBobinas.find(b=>b.codigo.toUpperCase()===cod||b.lote.toUpperCase()===cod);
+    if(bobina){
+        if(bobina.status==="CONSUMIDO"){
+            statusEl.className="p-3 rounded-xl bg-amber-950/80 border border-amber-800 text-amber-300 text-xs font-bold";
+            statusEl.textContent=`⚠️ ATENÇÃO: A Bobina Lote ${bobina.lote} já havia recebido baixa em ${bobina.dataBaixa}.`;
+        }else{
+            bobina.status="CONSUMIDO";bobina.dataBaixa=new Date().toLocaleString("pt-BR");salvarDados();
+            statusEl.className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-bold";
+            statusEl.textContent=`✓ BAIXA REGISTRADA COM SUCESSO! Lote: ${bobina.lote} | ${bobina.metragem} MT | ${bobina.peso} KG`;
+        }
+    }else{
+        statusEl.className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-red-300 text-xs font-bold";
+        statusEl.textContent=`❌ LOTE NÃO ENCONTRADO: Código "${cod}" não existe no estoque ativo. Realize a entrada primeiro.`;
+    }
+    document.getElementById("inputCodigoBipado").value="";
+}
+function carregarExemploEtiqueta(){
+    document.getElementById("cadCodigo").value="655870S2";document.getElementById("cadLote").value="655870";
+    document.getElementById("cadGramatura").value="229,26";document.getElementById("cadDescricao").value="TECIDO BRANCO CONVENCIONAL P/ BIG BAG SANFONADO 376 CM";
+    document.getElementById("cadMetragem").value=500;document.getElementById("cadPeso").value=431;document.getElementById("cadMaquina").value="4006";document.getElementById("cadOperador").value="4875";
+}
+function salvarNovaBobina(e){
+    e.preventDefault();
+    const codigo=document.getElementById("cadCodigo").value.trim().toUpperCase(),lote=document.getElementById("cadLote").value.trim().toUpperCase();
+    if(listaBobinas.find(b=>b.codigo===codigo)){alert("Já existe uma bobina cadastrada com este mesmo Código/Barcode!");return}
+    listaBobinas.unshift({codigo,lote,gramatura:document.getElementById("cadGramatura").value.trim(),descricao:document.getElementById("cadDescricao").value.trim().toUpperCase(),metragem:parseFloat(document.getElementById("cadMetragem").value)||0,peso:parseFloat(document.getElementById("cadPeso").value)||0,maquina:document.getElementById("cadMaquina").value.trim(),operador:document.getElementById("cadOperador").value.trim(),status:"EM ESTOQUE",dataEntrada:new Date().toLocaleString("pt-BR"),dataBaixa:"--"});
+    salvarDados();alert("Bobina cadastrada no estoque com sucesso!");document.getElementById("formCadastroBobina").reset();carregarExemploEtiqueta();alternarAba("estoque");
+}
+function filtrarStatus(st){filtroAtual=st;renderizarTabela()}
+function renderizarTabela(){
+    const tbody=document.getElementById("tabelaEstoqueBobinas");tbody.innerHTML="";
+    const filtrados=listaBobinas.filter(b=>filtroAtual==="TODOS"||b.status===filtroAtual);
+    if(!filtrados.length){tbody.innerHTML='<tr><td colspan="9" class="p-4 text-center text-slate-500 font-bold">Nenhuma bobina encontrada para este filtro.</td></tr>';return}
+    filtrados.forEach(b=>{
+        const tr=document.createElement("tr"),isConsumido=b.status==="CONSUMIDO",tagClass=isConsumido?"bg-amber-100 text-amber-800 font-black":"bg-emerald-100 text-emerald-800 font-black";
+        tr.className=isConsumido?"bg-slate-50/50":"bg-white";
+        const cells=[
+            `<span class="font-mono font-bold text-slate-900">${esc(b.codigo)}</span><span class="text-[10px] text-slate-500 block">Lote: ${esc(b.lote)}</span>`,
+            `<span class="font-bold text-slate-800 text-[11px]">${esc(b.descricao)}</span>`,
+            esc(b.gramatura),`<span class="font-black text-blue-700">${esc(b.metragem)} MT</span>`,`<span class="font-black text-purple-700">${esc(b.peso)} KG</span>`,
+            `Máq: <strong>${esc(b.maquina)}</strong><br>Op: <strong>${esc(b.operador)}</strong>`,
+            `<span class="px-2 py-1 rounded-md text-[10px] uppercase ${tagClass}">${esc(b.status)}</span>`,esc(b.dataEntrada),esc(b.dataBaixa)
+        ];
+        cells.forEach((html,i)=>{const td=document.createElement("td");td.className="p-3 border text-center";if(i===0||i===1)td.classList.add("text-left");td.innerHTML=html;tr.appendChild(td)});
+        tbody.appendChild(tr);
+    });
+}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+window.addEventListener("DOMContentLoaded",carregarDados);
+</script>
+</body>
+</html>
