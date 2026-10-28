@@ -6,6 +6,7 @@
     <title>Sistema Mestre - Gestão e Rastreio de Bobinas</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         @media print {
             .no-print { display: none !important; }
@@ -20,7 +21,7 @@
             <div>
                 <div class="flex items-center gap-2">
                     <h1 class="text-xl sm:text-2xl font-black text-white tracking-tight">Rastreio &amp; Controle de Bobinas</h1>
-                    <span class="bg-blue-500/20 text-blue-400 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full border border-blue-500/30">v1.0 Oficial</span>
+                    <span class="bg-blue-500/20 text-blue-400 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full border border-blue-500/30">v1.1 Leitura móvel</span>
                 </div>
                 <p class="text-xs text-slate-400 mt-1">Gestão de estoque, leitura por câmera/foto e baixa de consumo.</p>
             </div>
@@ -46,7 +47,7 @@
                     <div class="md:col-span-6 bg-slate-950 p-4 rounded-xl border border-slate-800 text-center">
                         <button id="btnCameraBaixa" onclick="iniciarCameraBaixa()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition">📷 Ligar Câmera do Celular</button>
                         <div id="qrReaderBaixa" class="w-full overflow-hidden rounded-lg mt-3"></div>
-                        <p id="cameraStatusBaixa" class="text-xs text-slate-400 mt-2">Toque no botão para ativar a câmera.</p>
+                        <p id="cameraStatusBaixa" class="text-xs text-slate-400 mt-2">Dica: limpe a lente, use boa iluminação e mantenha a etiqueta firme a 10–25 cm.</p>
                     </div>
                     <div class="md:col-span-6 bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
                         <div><label class="block text-xs font-bold text-slate-300 uppercase mb-2">Código do Barcode / Lote</label><div class="flex gap-2"><input type="text" id="inputCodigoBipado" placeholder="Ex: 655870S2 ou 655870" class="w-full bg-slate-900 border-2 border-slate-700 rounded-xl p-3 text-sm font-mono text-white focus:border-emerald-500 focus:outline-none"><button onclick="processarBaixaBobina(document.getElementById('inputCodigoBipado').value)" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 rounded-xl text-xs transition">Baixar</button></div></div>
@@ -61,9 +62,11 @@
                 <h2 class="text-base font-bold text-white mb-1 uppercase tracking-wider flex items-center gap-2"><span class="w-2.5 h-2.5 bg-blue-500 rounded-full inline-block"></span> Cadastrar Nova Bobina no Estoque</h2>
                 <p class="text-xs text-slate-400 mb-5">Leia a etiqueta com a câmera para preencher o código automaticamente. Confira os dados antes de cadastrar.</p>
                 <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 mb-5 text-center">
-                    <button type="button" id="btnCameraCadastro" onclick="iniciarCameraCadastro()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider">📷 Ler etiqueta para cadastrar</button>
+                    <button type="button" id="btnCameraCadastro" onclick="iniciarCameraCadastro()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider">📷 Abrir câmera / ler código</button>
+                    <button type="button" id="btnOcrEtiqueta" onclick="lerTextoEtiquetaOCR()" class="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider">🔎 Ler texto impresso da etiqueta</button>
                     <div id="qrReaderCadastro" class="w-full overflow-hidden rounded-lg mt-3"></div>
-                    <p id="cameraStatusCadastro" class="text-xs text-slate-400 mt-2">Aponte para o código de barras ou QR code.</p>
+                    <p id="cameraStatusCadastro" class="text-xs text-slate-400 mt-2">Enquadre o código de barras inteiro, na horizontal, no centro da imagem. Para os dados impressos, use “Ler texto impresso”.</p>
+                    <pre id="ocrTextoEtiqueta" class="hidden whitespace-pre-wrap break-words text-left text-xs text-slate-200 bg-slate-900 border border-slate-700 rounded-lg p-3 mt-3"></pre>
                 </div>
                 <form id="formCadastroBobina" onsubmit="salvarNovaBobina(event)" class="space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -130,7 +133,7 @@ async function iniciarLeitor(elementId, tipo) {
     const button = document.getElementById(tipo === "baixa" ? "btnCameraBaixa" : "btnCameraCadastro");
     let leitor = tipo === "baixa" ? cameraBaixa : cameraCadastro;
     if (!window.isSecureContext && location.hostname !== "localhost") {
-        status.textContent = "A câmera exige HTTPS. O navegador pode bloquear o acesso quando o HTML é aberto como arquivo baixado (content://). Publique/abra por um endereço HTTPS.";
+        status.textContent = "A câmera exige HTTPS. Abra o sistema pelo endereço seguro do GitHub Pages.";
         status.className = "text-xs text-amber-300 mt-2"; return;
     }
     if (!window.Html5Qrcode) {
@@ -141,59 +144,161 @@ async function iniciarLeitor(elementId, tipo) {
         if (leitor && leitor.isScanning) {
             await leitor.stop();
             status.textContent = "Câmera pausada. Toque novamente para reiniciar.";
-            button.textContent = tipo === "baixa" ? "📷 Ligar Câmera do Celular" : "📷 Ler etiqueta para cadastrar";
+            button.textContent = tipo === "baixa" ? "📷 Ligar Câmera do Celular" : "📷 Abrir câmera / ler código";
             return;
         }
         if (leitor) { try { await leitor.clear(); } catch (e) {} }
         if (!leitor) {
             leitor = new Html5Qrcode(elementId, { formatsToSupport: [
-                Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128,
-                Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A,
-                Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.ITF,
-                Html5QrcodeSupportedFormats.DATA_MATRIX
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.CODABAR,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.ITF,
+                Html5QrcodeSupportedFormats.DATA_MATRIX,
+                Html5QrcodeSupportedFormats.PDF_417,
+                Html5QrcodeSupportedFormats.AZTEC
             ], verbose: false });
             if (tipo === "baixa") cameraBaixa = leitor; else cameraCadastro = leitor;
         }
-        status.textContent = "Solicitando permissão da câmera...";
-        button.textContent = "⏳ Iniciando...";
-        const cameras = await Html5Qrcode.getCameras();
-        if (!cameras || !cameras.length) throw new Error("Nenhuma câmera encontrada.");
-        const camera = cameras.find(c => /back|rear|environment|traseira|principal/i.test(c.label)) || cameras[cameras.length - 1];
-        await leitor.start(camera.id, { fps: 12, qrbox: (w, h) => {
-            const side = Math.max(160, Math.min(280, Math.floor(Math.min(w, h) * 0.75)));
-            return { width: side, height: side };
-        }}, decodedText => {
-            const now = Date.now();
-            if (decodedText === ultimaLeitura && now - ultimaLeituraEm < 2500) return;
-            ultimaLeitura = decodedText; ultimaLeituraEm = now;
-            if (tipo === "baixa") {
-                processarBaixaBobina(decodedText);
-                status.textContent = "Etiqueta lida: " + decodedText;
-            } else {
-                preencherCadastroPelaEtiqueta(decodedText);
-                status.textContent = "Código lido: " + decodedText + ". Confira os dados e toque em Cadastrar no Estoque.";
+        status.textContent = "Solicitando câmera traseira...";
+        button.textContent = "⏳ Iniciando câmera...";
+        // Prioriza a câmera traseira pelo modo do navegador, que costuma funcionar melhor em celulares.
+        const config = {
+            fps: 15,
+            aspectRatio: 1.7777778,
+            disableFlip: true,
+            videoConstraints: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
             }
-            status.className = "text-xs text-emerald-300 mt-2";
-            leitor.pause(true);
-            button.textContent = "✓ Lido — toque para ler outra etiqueta";
-        }, () => {});
-        status.textContent = "Câmera ativa. Aponte para o código de barras ou QR code.";
+            // Sem qrbox: analisa o quadro inteiro, evitando cortar as extremidades do código de barras comprido.
+        };
+        const onDecoded = async (decodedText) => {
+            const valor = String(decodedText || "").trim();
+            if (!valor) return;
+            const now = Date.now();
+            if (valor === ultimaLeitura && now - ultimaLeituraEm < 2500) return;
+            ultimaLeitura = valor; ultimaLeituraEm = now;
+            if (tipo === "baixa") {
+                document.getElementById("inputCodigoBipado").value = valor;
+                processarBaixaBobina(valor);
+                status.textContent = "Código lido: " + valor + ". Se não localizar a bobina, confira se ela está cadastrada.";
+            } else {
+                preencherCadastroPelaEtiqueta(valor);
+                status.textContent = "Código capturado: " + valor + ". O código não contém necessariamente os demais dados da etiqueta; use o botão de OCR para tentar ler o texto impresso.";
+            }
+            status.className = "text-xs text-emerald-300 mt-2 break-words";
+            button.textContent = tipo === "baixa" ? "✓ Código lido — toque para ler outra etiqueta" : "✓ Código lido — câmera continua ativa para OCR";
+            // Na baixa, interrompe para impedir que o mesmo código seja processado repetidamente.
+            // No cadastro, mantém a câmera ativa para que o OCR possa ler os dados impressos da etiqueta.
+            if (tipo === "baixa") { try { if (leitor && leitor.isScanning) await leitor.stop(); } catch (e) {} }
+        };
+        // Usa a câmera traseira; se o navegador não aceitar constraints, tenta a câmera identificada pelo rótulo.
+        try {
+            await leitor.start({ facingMode: "environment" }, config, onDecoded, () => {});
+        } catch (firstError) {
+            const cameras = await Html5Qrcode.getCameras();
+            if (!cameras || !cameras.length) throw firstError;
+            const camera = cameras.find(c => /back|rear|environment|traseira|principal/i.test(c.label)) || cameras[cameras.length - 1];
+            await leitor.start(camera.id, config, onDecoded, () => {});
+        }
+        // Tenta foco contínuo em navegadores que permitem alterar a faixa de vídeo.
+        try {
+            const video = document.querySelector("#" + elementId + " video");
+            const track = video && video.srcObject && video.srcObject.getVideoTracks()[0];
+            if (track && track.applyConstraints) {
+                try { await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch (e) {}
+            }
+        } catch (e) {}
+        status.textContent = "Câmera ativa. Mantenha o código de barras inteiro, horizontal e bem iluminado no centro da imagem. Se não reconhecer, aproxime devagar e use o OCR para o texto impresso.";
         status.className = "text-xs text-emerald-300 mt-2";
         button.textContent = "⏹ Pausar câmera";
     } catch (err) {
-        status.textContent = "Não foi possível abrir a câmera: " + (err && err.message ? err.message : String(err)) + ". Permita o acesso à câmera nas configurações do navegador e tente novamente.";
+        status.textContent = "Não foi possível iniciar a câmera: " + (err && err.message ? err.message : String(err)) + ". Confira a permissão da câmera e tente novamente.";
         status.className = "text-xs text-red-300 mt-2";
         button.textContent = tipo === "baixa" ? "📷 Tentar ligar câmera novamente" : "📷 Tentar ler etiqueta novamente";
     }
+}
+async function lerTextoEtiquetaOCR() {
+    const status = document.getElementById("cameraStatusCadastro");
+    const out = document.getElementById("ocrTextoEtiqueta");
+    const btn = document.getElementById("btnOcrEtiqueta");
+    const video = document.querySelector("#qrReaderCadastro video");
+    if (!video || !video.videoWidth || video.readyState < 2) {
+        status.textContent = "Primeiro toque em ‘Abrir câmera / ler código’ e aguarde a imagem aparecer. Depois enquadre a etiqueta inteira e toque em ‘Ler texto impresso’.";
+        status.className = "text-xs text-amber-300 mt-2"; return;
+    }
+    if (!window.Tesseract) {
+        status.textContent = "O módulo OCR não carregou. Verifique a internet e recarregue a página.";
+        status.className = "text-xs text-red-300 mt-2"; return;
+    }
+    btn.disabled = true; btn.textContent = "⏳ Lendo texto...";
+    status.textContent = "Reconhecendo texto da etiqueta. Isso pode levar alguns segundos...";
+    status.className = "text-xs text-indigo-300 mt-2";
+    try {
+        const canvas = document.createElement("canvas");
+        // Amplia a captura para ajudar o OCR em etiquetas com letras pequenas.
+        const scale = Math.min(1.8, 1800 / video.videoWidth);
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const result = await Tesseract.recognize(canvas, "por+eng", { logger: m => {
+            if (m.status === "recognizing text" && m.progress) status.textContent = "Reconhecendo texto: " + Math.round(m.progress * 100) + "%";
+        }});
+        const texto = (result && result.data && result.data.text || "").trim();
+        out.textContent = texto || "Nenhum texto reconhecido. Tente iluminar melhor, aproximar e manter a etiqueta reta.";
+        out.classList.remove("hidden");
+        if (texto) preencherCamposPeloOCR(texto);
+        status.textContent = texto ? "Texto reconhecido abaixo. Os campos encontrados foram preenchidos como sugestão; confira antes de cadastrar." : "Não consegui reconhecer texto nesta captura. Tente novamente com a etiqueta inteira, nítida e bem iluminada.";
+        status.className = "text-xs " + (texto ? "text-emerald-300" : "text-amber-300") + " mt-2";
+    } catch (err) {
+        status.textContent = "Falha no OCR: " + (err && err.message ? err.message : String(err));
+        status.className = "text-xs text-red-300 mt-2";
+    } finally {
+        btn.disabled = false; btn.textContent = "🔎 Ler texto impresso da etiqueta";
+    }
+}
+function normalizarNumeroOCR(valor) {
+    if (!valor) return "";
+    const s = String(valor).replace(/\s/g, "").replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", ".");
+    const n = Number(s); return Number.isFinite(n) ? String(n) : "";
+}
+function preencherCamposPeloOCR(texto) {
+    const t = String(texto || "").replace(/\r/g, "\n");
+    const setIf = (id, val) => { if (val) document.getElementById(id).value = val; };
+    // Só aplica padrões rotulados para reduzir o risco de atribuir números ao campo errado.
+    let m = t.match(/Cod\.?\s*Bar\.?\s*[:.]?\s*([A-Z0-9]{6,14})/i);
+    if (m) setIf("cadCodigo", m[1].toUpperCase());
+    m = t.match(/Lote\s*[:.]?\s*([0-9]{4,12})/i);
+    if (m) setIf("cadLote", m[1]);
+    m = t.match(/Gram\.?\s*[:.]?\s*([0-9.,]{2,10})/i);
+    if (m) setIf("cadGramatura", m[1].replace(/\./g, "").replace(",", "."));
+    m = t.match(/Qtd(?:e)?\s*[:.]?\s*([0-9.,]+)\s*(?:MT|MTS?)/i);
+    if (m) setIf("cadMetragem", normalizarNumeroOCR(m[1]));
+    m = t.match(/Peso\s*L[ií1]q\.?\s*\(?KG\)?\s*[:.]?\s*([0-9.,]+)/i);
+    if (m) setIf("cadPeso", normalizarNumeroOCR(m[1]));
+    m = t.match(/M[aá]quina\s*[:.]?\s*([0-9]{2,8})/i);
+    if (m) setIf("cadMaquina", m[1]);
+    m = t.match(/Operador\s*[:.]?\s*([0-9]{2,8})/i);
+    if (m) setIf("cadOperador", m[1]);
+    // Tenta localizar a descrição sem substituir o valor padrão se o OCR não a identificar bem.
+    m = t.match(/Descri[cç][aã]o\s*:\s*([^\n]{8,100})/i);
+    if (m) setIf("cadDescricao", m[1].trim().toUpperCase());
 }
 function preencherCadastroPelaEtiqueta(texto) {
     const valor = String(texto || "").trim().toUpperCase();
     if (!valor) return;
     document.getElementById("cadCodigo").value = valor;
-    const numeros = valor.match(/\d{4,}/);
+    // Só preenche o lote automaticamente quando o conteúdo lido é inteiramente numérico.
+    // Não inventa um lote extraindo números de dentro de códigos alfanuméricos.
     if (/^\d+$/.test(valor)) document.getElementById("cadLote").value = valor;
-    else if (numeros && !document.getElementById("cadLote").value.trim()) document.getElementById("cadLote").value = numeros[0];
 }
 function processarBaixaBobina(codigoText){
     if(!codigoText||!codigoText.trim())return;
